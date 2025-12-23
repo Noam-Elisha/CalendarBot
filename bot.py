@@ -1,4 +1,5 @@
 import os
+import sys
 import discord
 from discord import app_commands
 from dotenv import load_dotenv
@@ -424,6 +425,32 @@ async def on_ready():
     
     print(f'Loaded {len(client.shared_events)} shared events')
     print(f'Loaded calendar events for {len(client.user_calendar_events)} users')
+
+
+
+async def is_owner(interaction: discord.Interaction) -> bool:
+    """Check if user is the owner"""
+    OWNER_ID = int(os.getenv('OWNER_ID'))
+    return interaction.user.id == OWNER_ID
+
+@client.tree.command(name="update", description="Update CalendarBot's code")
+@app_commands.check(is_owner)
+async def update(interaction: discord.Interaction):
+    await interaction.response.send_message("Updating!", ephemeral=True)
+    os.system("git pull")
+    sys.exit(0)
+
+@client.tree.command(name="stop", description="shut down CalendarBot")
+@app_commands.check(is_owner)
+async def stop(interaction: discord.Interaction):
+    await interaction.response.send_message("Shutting down!", ephemeral=True)
+    sys.exit(-1)
+
+@client.tree.command(name="restart", description="reboot CalendarBot")
+@app_commands.check(is_owner)
+async def restart(interaction: discord.Interaction):
+    await interaction.response.send_message("Restarting!", ephemeral=True)
+    sys.exit(0)
 
 
 @client.tree.command(name="register", description="Connect your Google Calendar")
