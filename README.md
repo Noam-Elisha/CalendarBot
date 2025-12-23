@@ -50,12 +50,9 @@ On first run, you'll be prompted to authorize the Google Calendar API access in 
 ## Commands
 
 - `/register` - Register your email for calendar invites
-  - Example: `/register email:user@example.com`
 
 - `/create_event` - Create a calendar event
   - Example: `/create_event name:Team Meeting date:12/25/2025 time:2:30 PM description:Discuss updates`
-
-- `/sync` - Manually sync slash commands (when adding new commands)
 
 ## Notes
 
