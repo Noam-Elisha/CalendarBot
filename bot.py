@@ -1019,16 +1019,19 @@ async def sync(interaction: discord.Interaction):
     
     try:
         # Sync global commands
-        await client.tree.sync()
+        synced_global = await client.tree.sync()
         
         # Sync test guild commands
-        test_guild_id = int(os.getenv('TEST_GUILD_ID', '0'))
+        test_guild_id = os.getenv('TEST_GUILD_ID', '0')
         if test_guild_id:
             test_guild = discord.Object(id=test_guild_id)
-            await client.tree.sync(guild=test_guild)
+            synced_guild = await client.tree.sync(guild=test_guild)
+            total_synced = len(synced_global) + len(synced_guild)
+        else:
+            total_synced = len(synced_global)
         
         await interaction.followup.send(
-            "✅ Commands synced successfully!",
+            f"✅ Synced {total_synced} command(s)",
             ephemeral=True
         )
     except Exception as e:
