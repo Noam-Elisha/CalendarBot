@@ -1026,7 +1026,7 @@ async def sync(interaction: discord.Interaction):
         if test_guild_id:
             test_guild = discord.Object(id=test_guild_id)
             synced_guild = await client.tree.sync(guild=test_guild)
-            total_synced = len(synced_global) + len(synced_guild)
+            total_synced = len(synced_global) + (synced_guild)
         else:
             total_synced = len(synced_global)
         
