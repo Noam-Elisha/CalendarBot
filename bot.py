@@ -430,23 +430,23 @@ async def on_ready():
 
 async def is_owner(interaction: discord.Interaction) -> bool:
     """Check if user is the owner"""
-    OWNER_ID = int(os.getenv('OWNER_ID'))
+    OWNER_ID = int(os.getenv('OWNER_ID', '0'))
     return interaction.user.id == OWNER_ID
 
-@client.tree.command(name="update", description="Update CalendarBot's code")
+@client.tree.command(name="update", description="Update CalendarBot's code", guild=discord.Object(id=int(os.getenv('TEST_GUILD_ID', '0'))))
 @app_commands.check(is_owner)
 async def update(interaction: discord.Interaction):
     await interaction.response.send_message("Updating!", ephemeral=True)
     os.system("git pull")
     sys.exit(0)
 
-@client.tree.command(name="stop", description="shut down CalendarBot")
+@client.tree.command(name="stop", description="shut down CalendarBot", guild=discord.Object(id=int(os.getenv('TEST_GUILD_ID', '0'))))
 @app_commands.check(is_owner)
 async def stop(interaction: discord.Interaction):
     await interaction.response.send_message("Shutting down!", ephemeral=True)
     sys.exit(-1)
 
-@client.tree.command(name="restart", description="reboot CalendarBot")
+@client.tree.command(name="restart", description="reboot CalendarBot", guild=discord.Object(id=int(os.getenv('TEST_GUILD_ID', '0'))))
 @app_commands.check(is_owner)
 async def restart(interaction: discord.Interaction):
     await interaction.response.send_message("Restarting!", ephemeral=True)
@@ -801,13 +801,25 @@ async def create_event(
             ephemeral=True
         )
 
-@client.tree.command(name="sync", description="Sync slash commands (owner only)")
+@client.tree.command(name="sync", description="Sync slash commands (owner only)", guild=discord.Object(id=int(os.getenv('TEST_GUILD_ID', '0'))))
 async def sync(interaction: discord.Interaction):
     """Manually sync slash commands"""
     await interaction.response.defer(ephemeral=True)
     
     try:
-        synced = await client.tree.sync()
+        # Sync global commands
+        synced_global = await client.tree.sync()
+        
+        # Sync test guild commands
+        test_guild_id = int(os.getenv('TEST_GUILD_ID', '0'))
+        if test_guild_id:
+            test_guild = discord.Object(id=test_guild_id)
+            synced_guild = await client.tree.sync(guild=test_guild)
+            total_synced = len(synced_global) + len(synced_guild)
+        else:
+            total_synced = len(synced_global)
+        
+        synced = total_synced
         await interaction.followup.send(
             f"✅ Synced {len(synced)} command(s)",
             ephemeral=True
