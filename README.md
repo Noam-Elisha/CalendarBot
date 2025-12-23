@@ -41,8 +41,8 @@ DISCORD_TOKEN=your_actual_discord_bot_token_here
 
 ### 5. Run the Bot
 
-```powershell
-.venv\Scripts\python.exe bot.py
+```bash
+sh reset.sh
 ```
 
 On first run, you'll be prompted to authorize the Google Calendar API access in your browser.
