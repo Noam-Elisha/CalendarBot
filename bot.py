@@ -631,6 +631,24 @@ async def restart(interaction: discord.Interaction):
     await interaction.response.send_message("Restarting!", ephemeral=True)
     sys.exit(0)
 
+@client.tree.command(name="code", description="View CalendarBot's source code on GitHub")
+async def code(interaction: discord.Interaction):
+    """Display link to GitHub repository"""
+    embed = discord.Embed(
+        title="📦 CalendarBot Source Code",
+        description="View and contribute to CalendarBot on GitHub!",
+        color=discord.Color.blurple(),
+        url="https://github.com/Noam-Elisha/CalendarBot"
+    )
+    embed.add_field(
+        name="Repository",
+        value="[github.com/Noam-Elisha/CalendarBot](https://github.com/Noam-Elisha/CalendarBot)",
+        inline=False
+    )
+    embed.set_footer(text="Feel free to star the repo ⭐")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 @client.tree.command(name="register", description="Connect your Google Calendar")
 async def register(interaction: discord.Interaction):
