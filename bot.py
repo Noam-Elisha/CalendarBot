@@ -1026,13 +1026,16 @@ async def sync(interaction: discord.Interaction):
         if test_guild_id:
             test_guild = discord.Object(id=test_guild_id)
             synced_guild = await client.tree.sync(guild=test_guild)
-            total_synced = len(synced_global) + (synced_guild)
+            total_synced = synced_global + synced_guild
         else:
-            total_synced = len(synced_global)
+            total_synced = synced_global
         
-        synced = total_synced
+        if not isinstance(total_synced, int):
+            synced = len(total_synced)
+        else:
+            synced = total_synced
         await interaction.followup.send(
-            f"✅ Synced {len(synced)} command(s)",
+            f"✅ Synced {synced} command(s)",
             ephemeral=True
         )
     except Exception as e:
