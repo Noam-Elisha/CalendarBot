@@ -22,7 +22,11 @@ class CalendarBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.user_data_file = 'userdata/user_data.json'
+        self.shared_events_file = 'userdata/shared_events.json'
+        self.user_calendar_events_file = 'userdata/user_calendar_events.json'
         self.user_emails = self.load_user_data()
+        self.shared_events = self.load_shared_events()
+        self.user_calendar_events = self.load_user_calendar_events()
     
     def load_user_data(self):
         """Load user email data from JSON file"""
@@ -35,6 +39,30 @@ class CalendarBot(discord.Client):
         """Save user email data to JSON file"""
         with open(self.user_data_file, 'w') as f:
             json.dump(self.user_emails, f, indent=2)
+    
+    def load_shared_events(self):
+        """Load shared events data from JSON file"""
+        if os.path.exists(self.shared_events_file):
+            with open(self.shared_events_file, 'r') as f:
+                return json.load(f)
+        return {}
+    
+    def save_shared_events(self):
+        """Save shared events data to JSON file"""
+        with open(self.shared_events_file, 'w') as f:
+            json.dump(self.shared_events, f, indent=2)
+    
+    def load_user_calendar_events(self):
+        """Load user calendar events mapping from JSON file"""
+        if os.path.exists(self.user_calendar_events_file):
+            with open(self.user_calendar_events_file, 'r') as f:
+                return json.load(f)
+        return {}
+    
+    def save_user_calendar_events(self):
+        """Save user calendar events mapping to JSON file"""
+        with open(self.user_calendar_events_file, 'w') as f:
+            json.dump(self.user_calendar_events, f, indent=2)
 
 client = CalendarBot()
 
@@ -155,7 +183,7 @@ class AddToCalendarView(discord.ui.View):
             )
             self.add_item(view_button)
     
-    @discord.ui.button(label="Add to My Calendar", style=discord.ButtonStyle.success, emoji="📅")
+    @discord.ui.button(label="Add to My Calendar", style=discord.ButtonStyle.success, emoji="📅", custom_id="persistent:add_to_calendar")
     async def add_to_calendar(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         
@@ -249,6 +277,16 @@ class AddToCalendarView(discord.ui.View):
             event_link = created_event.get('htmlLink')
             calendar_event_id = created_event.get('id')
             
+            # Store the calendar event ID for this user
+            if user_id not in client.user_calendar_events:
+                client.user_calendar_events[user_id] = []
+            client.user_calendar_events[user_id].append({
+                'calendar_event_id': calendar_event_id,
+                'event_name': event_data['name'],
+                'shared_event_id': self.event_id
+            })
+            client.save_user_calendar_events()
+            
             # Create success embed
             success_embed = discord.Embed(
                 title="✅ Event Added",
@@ -303,7 +341,7 @@ class DeleteEventView(discord.ui.View):
         self.calendar_event_id = calendar_event_id
         self.event_name = event_name
     
-    @discord.ui.button(label="Delete from Calendar", style=discord.ButtonStyle.danger, emoji="🗑️")
+    @discord.ui.button(label="Delete from Calendar", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="persistent:delete_from_calendar")
     async def delete_event(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verify it's the same user
         if str(interaction.user.id) != self.user_id:
@@ -342,6 +380,14 @@ class DeleteEventView(discord.ui.View):
             # Delete the event
             service.events().delete(calendarId='primary', eventId=self.calendar_event_id).execute()
             
+            # Remove from tracking
+            if self.user_id in client.user_calendar_events:
+                client.user_calendar_events[self.user_id] = [
+                    e for e in client.user_calendar_events[self.user_id] 
+                    if e['calendar_event_id'] != self.calendar_event_id
+                ]
+                client.save_user_calendar_events()
+            
             # Update the original message
             delete_embed = discord.Embed(
                 title="🗑️ Event Deleted",
@@ -362,6 +408,22 @@ async def on_ready():
     """Event handler for when the bot is ready"""
     print(f'{client.user} has connected to Discord!')
     print(f'Bot is in {len(client.guilds)} guilds')
+    
+    # Register persistent views for all stored events
+    for event_id in client.shared_events.keys():
+        client.add_view(AddToCalendarView(event_id, None))
+    
+    # Register DeleteEventView for all user calendar events
+    for user_id, events in client.user_calendar_events.items():
+        for event_info in events:
+            client.add_view(DeleteEventView(
+                user_id, 
+                event_info['calendar_event_id'], 
+                event_info['event_name']
+            ))
+    
+    print(f'Loaded {len(client.shared_events)} shared events')
+    print(f'Loaded calendar events for {len(client.user_calendar_events)} users')
 
 
 @client.tree.command(name="register", description="Connect your Google Calendar")
@@ -609,9 +671,6 @@ async def create_event(
         event_id = str(uuid.uuid4())
         
         # Store event info for "Add to Calendar" functionality
-        if not hasattr(client, 'shared_events'):
-            client.shared_events = {}
-        
         client.shared_events[event_id] = {
             'name': name,
             'description': description or '',
@@ -620,6 +679,7 @@ async def create_event(
             'creator_id': str(interaction.user.id),
             'location': location or ''
         }
+        client.save_shared_events()
         
         # Get Discord timestamp (Unix timestamp)
         unix_timestamp = int(event_dt.timestamp())
