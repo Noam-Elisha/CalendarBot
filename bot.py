@@ -11,6 +11,7 @@ import pickle
 import json
 from datetime import datetime, timedelta
 import re
+import traceback
 
 # Load environment variables
 load_dotenv()
@@ -961,6 +962,7 @@ async def create_event(
         try:
             # Convert Pacific time to UTC-aware datetime for Discord
             from datetime import timezone
+
             
             # Create timezone-aware datetime (Pacific is UTC-8)
             pacific_tz = timezone(timedelta(hours=-8))
@@ -1022,7 +1024,7 @@ async def sync(interaction: discord.Interaction):
         synced_global = await client.tree.sync()
         
         # Sync test guild commands
-        test_guild_id = os.getenv('TEST_GUILD_ID', '0')
+        test_guild_id = int(os.getenv('TEST_GUILD_ID', '0'))
         if test_guild_id:
             test_guild = discord.Object(id=test_guild_id)
             synced_guild = await client.tree.sync(guild=test_guild)
@@ -1036,7 +1038,7 @@ async def sync(interaction: discord.Interaction):
         )
     except Exception as e:
         await interaction.followup.send(
-            f"❌ Failed to sync: {str(e)}",
+            f"❌ Failed to sync: {str(e)}\n```\n{traceback.format_exc()}\n```",
             ephemeral=True
         )
 
