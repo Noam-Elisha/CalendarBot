@@ -28,7 +28,7 @@ A Discord bot that creates and manages Google Calendar events directly from Disc
 2. Create a new project
 3. Enable Google Calendar API
 4. Go to "Credentials" > "Create Credentials" > "OAuth client ID"
-5. Select "Desktop app" as application type
+5. **IMPORTANT:** Select "Desktop app" as application type (NOT "Web application")
 6. Download the credentials JSON file and save it as `credentials.json` in the project root
 
 ### 4. Set Environment Variables
@@ -49,15 +49,13 @@ On first run, you'll be prompted to authorize the Google Calendar API access in 
 
 ## Commands
 
-- `!create_event` - Create a calendar event
-  - Format: `!create_event Title | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Description`
-  - Example: `!create_event Team Meeting | 2025-12-25 10:00 | 2025-12-25 11:00 | Discuss project updates`
+- `/register` - Register your email for calendar invites
+  - Example: `/register email:user@example.com`
 
-- `!list_events` - List upcoming calendar events
-  - Usage: `!list_events [days]`
-  - Example: `!list_events 7`
+- `/create_event` - Create a calendar event
+  - Example: `/create_event name:Team Meeting date:12/25/2025 time:2:30 PM description:Discuss updates`
 
-- `!help_calendar` - Show help for calendar commands
+- `/sync` - Manually sync slash commands (when adding new commands)
 
 ## Notes
 

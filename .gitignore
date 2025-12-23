@@ -21,7 +21,7 @@ token.pickle
 credentials.json
 
 # User data
-user_data.json
+userdata/
 
 # IDE
 .vscode/
