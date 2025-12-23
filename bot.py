@@ -673,6 +673,36 @@ async def create_event(
         
         embed.set_footer(text="Click 'Add to My Calendar' to add this event to your Google Calendar")
         
+        # Create Discord scheduled event
+        try:
+            # Convert Pacific time to UTC-aware datetime for Discord
+            from datetime import timezone
+            
+            # Create timezone-aware datetime (Pacific is UTC-8)
+            pacific_tz = timezone(timedelta(hours=-8))
+            event_dt_aware = event_dt.replace(tzinfo=pacific_tz)
+            end_dt_aware = end_dt.replace(tzinfo=pacific_tz)
+            
+            scheduled_event = await interaction.guild.create_scheduled_event(
+                name=name,
+                description=description or "No description provided",
+                start_time=event_dt_aware,
+                end_time=end_dt_aware,
+                entity_type=discord.EntityType.external,
+                location=location or "No location specified",
+                privacy_level=discord.PrivacyLevel.guild_only
+            )
+            
+            # Add event link to embed
+            embed.add_field(
+                name="🎫 Discord Event",
+                value=f"[View Event](https://discord.com/events/{interaction.guild_id}/{scheduled_event.id})",
+                inline=False
+            )
+        except Exception as e:
+            print(f"Failed to create Discord scheduled event: {e}")
+            # Continue even if Discord event creation fails
+        
         # Create interactive view with buttons (no View link since event isn't created yet)
         view = AddToCalendarView(event_id, None)
         
