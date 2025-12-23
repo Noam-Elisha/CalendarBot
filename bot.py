@@ -170,9 +170,12 @@ async def check_if_user_has_event(user_id: str, event_name: str, start_time: str
 
 # Custom View for Add to Calendar button
 class AddToCalendarView(discord.ui.View):
-    def __init__(self, event_id: str, event_link: str = None):
+    def __init__(self, event_id: str, event_link: str = None, discord_event_id: str = None, guild_id: int = None, creator_id: str = None):
         super().__init__(timeout=None)  # Buttons persist
         self.event_id = event_id
+        self.discord_event_id = discord_event_id
+        self.guild_id = guild_id
+        self.creator_id = creator_id
         
         # Only add "View in Calendar" link button if event_link is provided
         if event_link:
@@ -333,6 +336,176 @@ class AddToCalendarView(discord.ui.View):
                 f"❌ Error adding event: {str(e)}",
                 ephemeral=True
             )
+    
+    @discord.ui.button(label="Delete Event", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="persistent:delete_shared_event")
+    async def delete_shared_event(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check if user is the creator
+        if str(interaction.user.id) != self.creator_id:
+            await interaction.response.send_message("❌ Only the event creator can delete this event.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Delete Discord scheduled event if it exists
+            if self.discord_event_id and self.guild_id:
+                try:
+                    guild = interaction.client.get_guild(self.guild_id)
+                    if guild:
+                        scheduled_event = await guild.fetch_scheduled_event(int(self.discord_event_id))
+                        await scheduled_event.delete()
+                except Exception as e:
+                    print(f"Failed to delete Discord event: {e}")
+            
+            # Remove from shared events
+            if self.event_id in client.shared_events:
+                event_name = client.shared_events[self.event_id]['name']
+                event_start = client.shared_events[self.event_id]['start']
+                event_end = client.shared_events[self.event_id]['end']
+                del client.shared_events[self.event_id]
+                client.save_shared_events()
+                
+                # Create response embed with remove button
+                delete_embed = discord.Embed(
+                    title="✅ Event Deleted",
+                    description=f"**{event_name}** has been deleted from the bot and Discord events.",
+                    color=discord.Color.green()
+                )
+                delete_embed.add_field(
+                    name="Remove from Your Calendar",
+                    value="If you had added this event to your Google Calendar, click the button below to remove it.",
+                    inline=False
+                )
+                
+                # Create view with remove from calendar button
+                remove_view = RemoveDeletedEventView(event_name, event_start, event_end)
+                
+                await interaction.followup.send(embed=delete_embed, view=remove_view, ephemeral=True)
+                
+                # Update the original message to show it's deleted
+                try:
+                    await interaction.message.edit(content="⚠️ This event has been deleted.", embed=None, view=None)
+                except:
+                    pass
+            else:
+                await interaction.followup.send("❌ Event not found.", ephemeral=True)
+        
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error deleting event: {str(e)}", ephemeral=True)
+
+# Custom View for removing a deleted event from user's calendar
+class RemoveDeletedEventView(discord.ui.View):
+    def __init__(self, event_name: str, event_start: str, event_end: str):
+        super().__init__(timeout=300)  # 5 minute timeout since it's ephemeral
+        self.event_name = event_name
+        self.event_start = event_start
+        self.event_end = event_end
+    
+    @discord.ui.button(label="Remove from My Calendar", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def remove_from_calendar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        
+        # Check if user is registered
+        if user_id not in client.user_emails:
+            await interaction.response.send_message(
+                "❌ You're not registered or don't have this event in your calendar.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Check if user has this event
+            has_event = await check_if_user_has_event(
+                user_id,
+                self.event_name,
+                self.event_start,
+                self.event_end
+            )
+            
+            if not has_event:
+                await interaction.followup.send(
+                    "❌ This event is not in your calendar.",
+                    ephemeral=True
+                )
+                return
+            
+            # Load user's credentials
+            user_data = client.user_emails[user_id]
+            creds_file = user_data.get('creds_file')
+            
+            if not creds_file or not os.path.exists(creds_file):
+                await interaction.followup.send(
+                    "❌ Your credentials are missing.",
+                    ephemeral=True
+                )
+                return
+            
+            with open(creds_file, 'rb') as token:
+                creds = pickle.load(token)
+            
+            # Refresh credentials if expired
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                with open(creds_file, 'wb') as token:
+                    pickle.dump(creds, token)
+            
+            # Create calendar service
+            service = build('calendar', 'v3', credentials=creds)
+            
+            # Find and delete the event
+            start_rfc = self.event_start
+            end_rfc = self.event_end
+            
+            # Add timezone suffix if not present
+            if not start_rfc.endswith('Z') and '+' not in start_rfc and start_rfc.count('-') == 2:
+                start_rfc += '-08:00'
+            if not end_rfc.endswith('Z') and '+' not in end_rfc and end_rfc.count('-') == 2:
+                end_rfc += '-08:00'
+            
+            events_result = service.events().list(
+                calendarId='primary',
+                timeMin=start_rfc,
+                timeMax=end_rfc,
+                q=self.event_name,
+                singleEvents=True
+            ).execute()
+            
+            events = events_result.get('items', [])
+            
+            # Find matching event and delete it
+            deleted = False
+            for event in events:
+                if event.get('summary') == self.event_name:
+                    service.events().delete(calendarId='primary', eventId=event['id']).execute()
+                    deleted = True
+                    
+                    # Remove from tracking
+                    if user_id in client.user_calendar_events:
+                        client.user_calendar_events[user_id] = [
+                            e for e in client.user_calendar_events[user_id]
+                            if e['calendar_event_id'] != event['id']
+                        ]
+                        client.save_user_calendar_events()
+                    break
+            
+            if deleted:
+                await interaction.followup.send(
+                    f"✅ **{self.event_name}** has been removed from your calendar.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "❌ Could not find the event in your calendar.",
+                    ephemeral=True
+                )
+        
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error removing event: {str(e)}",
+                ephemeral=True
+            )
 
 # Custom View for delete button on success response
 class DeleteEventView(discord.ui.View):
@@ -411,8 +584,14 @@ async def on_ready():
     print(f'Bot is in {len(client.guilds)} guilds')
     
     # Register persistent views for all stored events
-    for event_id in client.shared_events.keys():
-        client.add_view(AddToCalendarView(event_id, None))
+    for event_id, event_data in client.shared_events.items():
+        client.add_view(AddToCalendarView(
+            event_id, 
+            None,
+            discord_event_id=event_data.get('discord_event_id'),
+            guild_id=event_data.get('guild_id'),
+            creator_id=event_data.get('creator_id')
+        ))
     
     # Register DeleteEventView for all user calendar events
     for user_id, events in client.user_calendar_events.items():
@@ -780,6 +959,13 @@ async def create_event(
                 privacy_level=discord.PrivacyLevel.guild_only
             )
             
+            discord_event_id = str(scheduled_event.id)
+            
+            # Store discord event ID in shared events
+            client.shared_events[event_id]['discord_event_id'] = discord_event_id
+            client.shared_events[event_id]['guild_id'] = interaction.guild_id
+            client.save_shared_events()
+            
             # Add event link to embed
             embed.add_field(
                 name="🎫 Discord Event",
@@ -788,10 +974,17 @@ async def create_event(
             )
         except Exception as e:
             print(f"Failed to create Discord scheduled event: {e}")
+            discord_event_id = None
             # Continue even if Discord event creation fails
         
         # Create interactive view with buttons (no View link since event isn't created yet)
-        view = AddToCalendarView(event_id, None)
+        view = AddToCalendarView(
+            event_id, 
+            None, 
+            discord_event_id=discord_event_id if 'discord_event_id' in locals() else None,
+            guild_id=interaction.guild_id,
+            creator_id=str(interaction.user.id)
+        )
         
         await interaction.followup.send(embed=embed, view=view)
         
